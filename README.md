@@ -1,6 +1,6 @@
 # Nikotine Island
 
-A Bot Crossing–style colony for Nikhil’s second brain. Four plots, seven roaming astronauts. Original models — not copied
+A Blank canvas! bot Crossing–style colony for Nikhil’s second brain. Four plots, seven roaming astronauts. Original models — not copied.
 ## Run
 
 ```powershell
