@@ -1,7 +1,6 @@
-# Nikhil Island
+# Nikotine Island
 
-A Bot Crossing–style colony for Nikhil’s second brain. Four plots, seven roaming astronauts. Original models — not KayKit, not PlayStation Astro Bot.
-
+A Bot Crossing–style colony for Nikhil’s second brain. Four plots, seven roaming astronauts. Original models — not copied
 ## Run
 
 ```powershell
