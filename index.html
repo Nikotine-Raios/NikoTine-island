@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nikhil Island</title>
+    <link rel="stylesheet" href="./style.css?v=39" />
+  </head>
+  <body>
+    <div id="view"></div>
+    <aside id="hud" class="collapsed">
+      <button id="hudToggle" type="button" aria-expanded="false" aria-controls="hudPanel" aria-label="Show colony panel">
+        <span class="chevron" aria-hidden="true"></span>
+      </button>
+      <div class="panel" id="hudPanel">
+        <div class="panel-head">
+          <p class="kicker">Second brain colony</p>
+          <h1>Nikhil Island</h1>
+          <p class="counts" id="counts"></p>
+        </div>
+        <div class="zones" id="zoneList"></div>
+        <section id="tasks" class="tasks">
+          <p class="kicker" id="cardKicker">Tasks</p>
+          <h2 id="cardTitle"></h2>
+          <p class="meta" id="cardMeta"></p>
+          <ul id="cardItems"></ul>
+        </section>
+      </div>
+    </aside>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./app.js?v=39"></script>
+  </body>
+</html>
