@@ -79,6 +79,21 @@ const BOTS = [
   { name: "Echo", home: null, color: 0x8a96a4, objective: "Listen for a voice note, then pass it to main.", need: false },
 ];
 
+// Agent status comes from state.live.json (written by agents/run.js) or the committed demo state.json.
+const STATUS_GLYPH = { idle: "", working: "●", needs_input: "?", down: "!", unknown: "?" };
+const STATUS_LABEL = {
+  idle: "idle",
+  working: "working",
+  needs_input: "needs input",
+  down: "down",
+  unknown: "no signal",
+};
+const STATUS_COLOR = { needs_input: 0xffc14d, down: 0xe35d6a, unknown: 0x9aa4ad };
+const STATE_URLS = ["./state.live.json", "./state.json"];
+const STATE_POLL_MS = 5000;
+let agentState = null;
+let runnerHealth = "demo";
+
 let selectBot = () => {};
 
 const view = document.getElementById("view");
@@ -91,6 +106,19 @@ const cardKicker = document.getElementById("cardKicker");
 const cardTitle = document.getElementById("cardTitle");
 const cardMeta = document.getElementById("cardMeta");
 const cardItems = document.getElementById("cardItems");
+const intro = document.getElementById("intro");
+const introLiquid = document.getElementById("introLiquid");
+const introMaskRect = document.getElementById("introMaskRect");
+const introShadeRect = document.getElementById("introShadeRect");
+const introCutout = document.getElementById("introCutout");
+const introDroplet = document.getElementById("introDroplet");
+const introRim = document.getElementById("introRim");
+const introStars = document.getElementById("introStars");
+const introHighlight = document.getElementById("introHighlight");
+const introHighlightSmall = document.getElementById("introHighlightSmall");
+const introLensShade = document.getElementById("introLensShade");
+const replayIntro = document.getElementById("replayIntro");
+const overviewButton = document.getElementById("overviewButton");
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8ec8ef);
@@ -99,12 +127,16 @@ scene.fog = new THREE.Fog(0xb7d8ef, 80, 180);
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400);
 camera.position.set(26, 16, 30);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: "high-performance",
+  stencil: false,
+});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.08;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 view.appendChild(renderer.domElement);
 
@@ -116,8 +148,8 @@ view.appendChild(labels.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.055;
-controls.rotateSpeed = 1;
+controls.dampingFactor = 0.11;
+controls.rotateSpeed = 0.82;
 controls.minDistance = 10;
 controls.maxDistance = 90;
 controls.maxPolarAngle = Math.PI * 0.47;
@@ -143,8 +175,8 @@ sun.shadow.camera.right = 55;
 sun.shadow.camera.top = 55;
 sun.shadow.camera.bottom = -55;
 scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xb8dfff, 0x7a8a4a, 0.55));
-scene.add(new THREE.AmbientLight(0xfff7ea, 0.28));
+scene.add(new THREE.HemisphereLight(0xc6e8ff, 0x52653a, 0.78));
+scene.add(new THREE.AmbientLight(0xfff1dc, 0.2));
 
 function hex(color) {
   return `#${color.toString(16).padStart(6, "0")}`;
@@ -186,12 +218,99 @@ function addLabel(object, text, extraClass = "", y = 2.6, color) {
   return el;
 }
 
-const island = new THREE.Mesh(new THREE.CircleGeometry(46, 80), mat(0x6faf4e, { roughness: 0.92 }));
+function paintedTexture(size, painter) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  painter(canvas.getContext("2d"), size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return texture;
+}
+
+function seeded(index, salt = 0) {
+  const value = Math.sin((index + 1) * (12.9898 + salt * 9.173)) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+const grassTexture = paintedTexture(512, (ctx, size) => {
+  const wash = ctx.createLinearGradient(0, 0, size, size);
+  wash.addColorStop(0, "#72b653");
+  wash.addColorStop(0.5, "#5fa447");
+  wash.addColorStop(1, "#4b8d3e");
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 1500; i += 1) {
+    const x = seeded(i, 1) * size;
+    const y = seeded(i, 2) * size;
+    const length = 1 + seeded(i, 3) * 5;
+    ctx.strokeStyle = seeded(i, 4) > 0.5 ? "rgba(28,92,43,.16)" : "rgba(210,238,143,.1)";
+    ctx.lineWidth = 0.5 + seeded(i, 5);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + length, y - length * 0.35);
+    ctx.stroke();
+  }
+});
+
+const sandTexture = paintedTexture(256, (ctx, size) => {
+  ctx.fillStyle = "#dfc78e";
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 700; i += 1) {
+    const shade = Math.round(160 + seeded(i, 6) * 65);
+    ctx.fillStyle = `rgba(${shade},${Math.round(shade * 0.88)},${Math.round(shade * 0.61)},.2)`;
+    const r = 0.4 + seeded(i, 7) * 1.25;
+    ctx.beginPath();
+    ctx.arc(seeded(i, 8) * size, seeded(i, 9) * size, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+});
+
+const waterTexture = paintedTexture(512, (ctx, size) => {
+  const ocean = ctx.createLinearGradient(0, 0, size, size);
+  ocean.addColorStop(0, "#2f88b8");
+  ocean.addColorStop(0.48, "#4bafd0");
+  ocean.addColorStop(1, "#1f6e9f");
+  ctx.fillStyle = ocean;
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 48; i += 1) {
+    const y = (i / 48) * size;
+    ctx.strokeStyle = `rgba(204,242,255,${0.025 + (i % 5) * 0.012})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= size; x += 8) {
+      const wave = Math.sin(x * 0.045 + i * 1.7) * 2.5;
+      if (x === 0) ctx.moveTo(x, y + wave);
+      else ctx.lineTo(x, y + wave);
+    }
+    ctx.stroke();
+  }
+});
+waterTexture.wrapS = THREE.RepeatWrapping;
+waterTexture.wrapT = THREE.RepeatWrapping;
+waterTexture.repeat.set(2.2, 2.2);
+
+const islandBase = new THREE.Mesh(
+  new THREE.CylinderGeometry(46, 47.5, 1.25, 80),
+  mat(0x596540, { roughness: 0.96 }),
+);
+islandBase.position.y = -0.66;
+islandBase.receiveShadow = true;
+scene.add(islandBase);
+
+const island = new THREE.Mesh(
+  new THREE.CircleGeometry(46, 80),
+  mat(0xffffff, { map: grassTexture, roughness: 0.86 }),
+);
 island.rotation.x = -Math.PI / 2;
 island.receiveShadow = true;
 scene.add(island);
 
-const sand = new THREE.Mesh(new THREE.RingGeometry(44, 50, 80), mat(0xe6d2a4, { roughness: 0.9 }));
+const sand = new THREE.Mesh(
+  new THREE.RingGeometry(44, 50, 80),
+  mat(0xffffff, { map: sandTexture, roughness: 0.92 }),
+);
 sand.rotation.x = -Math.PI / 2;
 sand.position.y = 0.02;
 sand.receiveShadow = true;
@@ -199,7 +318,16 @@ scene.add(sand);
 
 const water = new THREE.Mesh(
   new THREE.CircleGeometry(78, 80),
-  mat(0x4aa3d4, { roughness: 0.35, metalness: 0.08, transparent: true, opacity: 0.88 }),
+  new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    map: waterTexture,
+    roughness: 0.2,
+    metalness: 0.05,
+    clearcoat: 0.9,
+    clearcoatRoughness: 0.16,
+    transparent: true,
+    opacity: 0.94,
+  }),
 );
 water.rotation.x = -Math.PI / 2;
 water.position.y = -0.35;
@@ -974,15 +1102,39 @@ function blocked(x, z, pad = 0.75) {
   return OBSTACLES.some((o) => obstacleGap(x, z, o) < pad);
 }
 
-function openPoint(x, z) {
-  if (!blocked(x, z, 0.85)) return { x, z };
-  for (let i = 0; i < 14; i += 1) {
-    const a = (i / 14) * Math.PI * 2;
+function shoveOut(x, z) {
+  let best = null;
+  let bestGap = -1;
+  for (let i = 0; i < 20; i += 1) {
+    const a = (i / 20) * Math.PI * 2;
     const px = x + Math.cos(a) * 3.2;
     const pz = z + Math.sin(a) * 3.2;
-    if (!blocked(px, pz, 0.85)) return { x: px, z: pz };
+    if (px * px + pz * pz > 37 * 37 || blocked(px, pz, 0.9)) continue;
+    let gap = 99;
+    for (const obstacle of OBSTACLES) gap = Math.min(gap, obstacleGap(px, pz, obstacle));
+    if (gap > bestGap) {
+      bestGap = gap;
+      best = { x: px, z: pz };
+    }
   }
-  return { x, z };
+  return best || nearestOpen(x, z);
+}
+
+function nearestOpen(x, z) {
+  if (!blocked(x, z, 0.9) && x * x + z * z < 38 * 38) return { x, z };
+  for (let ring = 1; ring <= 8; ring += 1) {
+    for (let i = 0; i < 16; i += 1) {
+      const a = (i / 16) * Math.PI * 2 + ring;
+      const px = x + Math.cos(a) * ring * 1.8;
+      const pz = z + Math.sin(a) * ring * 1.8;
+      if (px * px + pz * pz < 38 * 38 && !blocked(px, pz, 0.9)) return { x: px, z: pz };
+    }
+  }
+  return { x: 0, z: 8 };
+}
+
+function openPoint(x, z) {
+  return nearestOpen(x, z);
 }
 
 function steerDir(x, z, tx, tz) {
@@ -1099,8 +1251,13 @@ cinemaCanvas.height = 288;
 const cinemaCtx = cinemaCanvas.getContext("2d");
 const cinemaTex = new THREE.CanvasTexture(cinemaCanvas);
 cinemaTex.colorSpace = THREE.SRGBColorSpace;
+let lastCinemaFrame = -Infinity;
 
-function paintCinema(t) {
+function paintCinema(t, force = false) {
+  // Uploading a 512x288 canvas texture every render frame is expensive on
+  // integrated GPUs. Ten updates per second still looks animated.
+  if (!force && t - lastCinemaFrame < 0.1) return;
+  lastCinemaFrame = t;
   const ctx = cinemaCtx;
   ctx.fillStyle = "#071018";
   ctx.fillRect(0, 0, 512, 288);
@@ -1126,7 +1283,7 @@ function paintCinema(t) {
   ctx.fillText("popping out of the UFO", 158, 82);
   cinemaTex.needsUpdate = true;
 }
-paintCinema(0);
+paintCinema(0, true);
 
 function buildUfo() {
   const root = new THREE.Group();
@@ -1278,15 +1435,15 @@ function makeBot(spec) {
   g.add(glintR);
 
   const armor = new THREE.MeshPhysicalMaterial({
-    color: spec.need ? 0xffd27a : accent,
+    color: accent,
     roughness: 0.4,
     metalness: 0.08,
     clearcoat: 0.5,
     clearcoatRoughness: 0.32,
     sheen: 0.35,
     sheenColor: new THREE.Color(0xffffff),
-    emissive: spec.need ? 0xffc14d : accent,
-    emissiveIntensity: spec.need ? 0.16 : 0.04,
+    emissive: accent,
+    emissiveIntensity: 0.04,
   });
 
   const vest = new THREE.Mesh(
@@ -1331,7 +1488,7 @@ function makeBot(spec) {
 
   const lamp = new THREE.Mesh(
     new THREE.SphereGeometry(0.046, 12, 10),
-    mat(0xfff6df, { roughness: 0.25, metalness: 0.2, emissive: spec.need ? 0xffc14d : 0xfff1c8, emissiveIntensity: 0.35 }),
+    mat(0xfff6df, { roughness: 0.25, metalness: 0.2, emissive: 0xfff1c8, emissiveIntensity: 0.35 }),
   );
   lamp.position.set(0, 0.86, 0.5);
   g.add(lamp);
@@ -1360,17 +1517,23 @@ function makeBot(spec) {
     armL,
     armR,
     lamp,
+    armor,
     bubble,
     nameTag: null,
     selected: false,
     walkY: 0.12,
+    status: null,
+    agent: null,
+    tilt: 0,
   };
   const first = plotTarget(g);
   g.userData.tx = first.x;
   g.userData.tz = first.z;
   tagBot(g, spec);
-  const nameTag = addLabel(g, `${spec.need ? '<span class="need">?</span>' : ""}${spec.name}`, "bot", 2.05, accent);
+  const nameTag = addLabel(g, spec.name, "bot", 2.05, accent);
   g.userData.nameTag = nameTag;
+  g.userData.nameSpan = nameTag.querySelector("span:last-child");
+  setBotStatus(g, spec.need ? "needs_input" : "idle");
   nameTag.dataset.bot = spec.name;
   nameTag.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
@@ -1392,7 +1555,7 @@ const VISITORS = [
   { name: "Quill", home: null, color: 0xf4a261, objective: "Beam in, check the plots, beam back up.", need: false, visitor: true },
 ];
 let nextVisitor = 0;
-let visitorCooldown = 8;
+let visitorCooldown = 36;
 
 function plotTarget(bot) {
   const home = ZONES.find((z) => z.id === bot.userData.home);
@@ -1474,6 +1637,111 @@ function clearBotSelection() {
   });
 }
 
+function setBotStatus(bot, status) {
+  const data = bot.userData;
+  if (!STATUS_GLYPH.hasOwnProperty(status)) status = "idle";
+  if (data.status === status) return;
+  data.status = status;
+  const tint = STATUS_COLOR[status] ?? data.color;
+  data.armor.color.set(tint);
+  data.armor.emissive.set(tint);
+  data.armor.emissiveIntensity = STATUS_COLOR[status] ? 0.18 : 0.04;
+  data.lamp.material.emissive.set(status === "down" ? 0xff5a5a : STATUS_COLOR[status] ?? 0xfff1c8);
+  if (data.nameSpan) {
+    const glyph = STATUS_GLYPH[status];
+    data.nameSpan.innerHTML = `${glyph ? `<span class="status ${status}">${glyph}</span>` : ""}${data.name}`;
+  }
+  if (status === "down") {
+    if (!["beamDown", "beamUp"].includes(data.mode) && !data.aboard) {
+      data.mode = "down";
+      data.tilt = 0;
+    }
+  } else if (data.mode === "down") {
+    data.mode = "roam";
+    data.wait = 0.5;
+  }
+}
+
+function relativeTime(iso) {
+  if (!iso) return "never";
+  const diff = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diff)) return "unknown";
+  const abs = Math.abs(diff);
+  const unit =
+    abs < 60_000 ? [Math.round(abs / 1000), "s"] :
+    abs < 3_600_000 ? [Math.round(abs / 60_000), "m"] :
+    abs < 86_400_000 ? [Math.round(abs / 3_600_000), "h"] :
+    [Math.round(abs / 86_400_000), "d"];
+  return diff >= 0 ? `${unit[0]}${unit[1]} ago` : `in ${unit[0]}${unit[1]}`;
+}
+
+function runnerIsStale(state) {
+  if (state.demo) return false;
+  const beat = state.runner?.heartbeatAt ? new Date(state.runner.heartbeatAt).getTime() : 0;
+  const grace = Math.max(90, (state.runner?.tickSec ?? 10) * 6) * 1000;
+  return Date.now() - beat > grace;
+}
+
+function applyState(state) {
+  agentState = state;
+  const stale = runnerIsStale(state);
+  runnerHealth = state.demo ? "demo" : stale ? "stale" : state.runner?.ollama === "down" ? "ollama down" : "live";
+  const seen = new Set();
+  for (const agent of state.agents ?? []) {
+    const id = String(agent.id ?? agent.name ?? "").toLowerCase();
+    if (!id) continue;
+    seen.add(id);
+    let bot = botMeshes.find((b) => !b.userData.visitor && b.userData.name.toLowerCase() === id);
+    if (!bot) {
+      const home = ZONES.find((z) => z.id === agent.home);
+      bot = makeBot({
+        name: agent.name ?? id,
+        home: home ? home.id : null,
+        color: 0x8a96a4,
+        objective: agent.task || "No task assigned.",
+        fromShip: true,
+        beamDelay: 0,
+      });
+      botMeshes.push(bot);
+    }
+    const data = bot.userData;
+    data.agent = agent;
+    if (agent.task) data.objective = agent.task;
+    setBotStatus(bot, stale ? "unknown" : agent.status ?? "idle");
+  }
+  for (const bot of botMeshes) {
+    if (bot.userData.visitor || seen.has(bot.userData.name.toLowerCase())) continue;
+    bot.userData.agent = null;
+    setBotStatus(bot, "idle");
+  }
+  refreshCounts();
+  if (followBot?.userData) renderBotCard(followBot);
+}
+
+async function loadState() {
+  for (const url of STATE_URLS) {
+    try {
+      const res = await fetch(`${url}?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) continue;
+      return await res.json();
+    } catch {
+      // try the next source
+    }
+  }
+  return null;
+}
+
+async function pollState() {
+  if (document.hidden) {
+    window.setTimeout(pollState, STATE_POLL_MS);
+    return;
+  }
+  const state = await loadState();
+  if (state) applyState(state);
+  else if (agentState && !agentState.demo) applyState({ ...agentState, runner: { ...agentState.runner, heartbeatAt: 0 } });
+  window.setTimeout(pollState, STATE_POLL_MS);
+}
+
 function setHudOpen(open) {
   hud.classList.toggle("collapsed", !open);
   hudToggle.setAttribute("aria-expanded", open ? "true" : "false");
@@ -1488,7 +1756,46 @@ function markActive(id) {
 
 function refreshCounts() {
   const live = botMeshes.filter((bot) => !bot.userData.aboard).length;
-  counts.textContent = `${live} astronaut${live === 1 ? "" : "s"} · 4 plots`;
+  const agents = botMeshes.filter((bot) => bot.userData.agent);
+  const down = agents.filter((bot) => bot.userData.status === "down").length;
+  const asking = agents.filter((bot) => bot.userData.status === "needs_input").length;
+  const bits = [`${live} astronaut${live === 1 ? "" : "s"}`, `${agents.length} agent${agents.length === 1 ? "" : "s"}`];
+  if (down) bits.push(`${down} down`);
+  if (asking) bits.push(`${asking} asking`);
+  bits.push(`runner ${runnerHealth}`);
+  counts.textContent = bits.join(" · ");
+  counts.dataset.health = runnerHealth;
+}
+
+function renderBotCard(bot) {
+  const data = bot.userData;
+  const home = ZONES.find((z) => z.id === data.home);
+  const agent = data.agent;
+  const status = data.status ?? "idle";
+  cardKicker.textContent = `${home ? home.name : "Roaming"} ${agent ? "agent" : "astronaut"} · ${STATUS_LABEL[status]}`;
+  cardTitle.textContent = data.name;
+  cardMeta.textContent = data.objective;
+  if (agent) {
+    const rows = [];
+    if (status === "down") rows.push({ badge: "down", text: agent.error || "Agent stopped reporting." });
+    if (status === "unknown") rows.push({ badge: "lost", text: "The runner has stopped sending heartbeats." });
+    rows.push({ badge: "last", text: agent.summary ? agent.summary : "No output yet." });
+    rows.push({ badge: "ran", text: `${relativeTime(agent.lastRunAt)}${agent.runs ? ` · ${agent.runs} run${agent.runs === 1 ? "" : "s"}` : ""}` });
+    if (agent.nextRunAt) rows.push({ badge: "next", text: relativeTime(agent.nextRunAt) });
+    if (agent.model) rows.push({ badge: "model", text: agent.model });
+    cardItems.innerHTML = rows
+      .map((row) => `<li><span class="badge ${row.badge}">${row.badge}</span><span>${escapeHtml(row.text)}</span></li>`)
+      .join("");
+  } else {
+    cardItems.innerHTML = home
+      ? home.items.map((item) => `<li><span class="badge">${item.badge}</span><span>${item.text}</span></li>`).join("")
+      : '<li><span class="badge">idle</span><span>No assigned plot. Patrol only.</span></li>';
+  }
+  markActive(data.home || "station");
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
 }
 
 function showZone(zone) {
@@ -1507,22 +1814,18 @@ function showZone(zone) {
 
 function showBot(bot) {
   const data = bot.userData;
-  const home = ZONES.find((z) => z.id === data.home);
   clearBotSelection();
   data.selected = true;
   data.bubble.className = "speech open";
   data.bubble.textContent = data.objective;
-  cardKicker.textContent = home ? `${home.name} astronaut` : "Roaming astronaut";
-  cardTitle.textContent = data.name;
-  cardMeta.textContent = data.objective;
-  cardItems.innerHTML = home
-    ? home.items.map((item) => `<li><span class="badge">${item.badge}</span><span>${item.text}</span></li>`).join("")
-    : '<li><span class="badge">idle</span><span>No assigned plot. Patrol only.</span></li>';
-  markActive(data.home || "station");
+  renderBotCard(bot);
   refreshCounts();
   followBot = bot;
   flyGoal = null;
-  if (data.aboard) {
+  controls.enabled = true;
+  if (data.mode === "down") {
+    // A downed agent stays where it fell; just look at it.
+  } else if (data.aboard) {
     setBotAboard(bot, false);
     data.mode = "beamDown";
     data.beamT = 0;
@@ -1547,21 +1850,85 @@ let flyGoal = null;
 let followBot = null;
 const followPos = new THREE.Vector3();
 const followLook = new THREE.Vector3();
+const overviewPos = new THREE.Vector3(26, 16, 30);
+const overviewTarget = new THREE.Vector3(0, 1.6, 0);
 
 function easeInOutCubic(u) {
   return u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2;
 }
 
-function flyTo(x, z, kind = "plot") {
-  const bot = kind === "bot";
+function settleControls(position, target) {
+  // Drop leftover orbit inertia, then let OrbitControls adopt the pose we
+  // just flew to. Updating before the copy would yank the camera away.
+  controls._sphericalDelta.set(0, 0, 0);
+  controls._panOffset.set(0, 0, 0);
+  controls._scale = 1;
+  camera.position.copy(position);
+  controls.target.copy(target);
+  const damping = controls.enableDamping;
+  controls.enableDamping = false;
+  controls.update();
+  controls.enableDamping = damping;
+}
+
+const flightDir = new THREE.Vector3();
+const flightSpin = new THREE.Quaternion();
+const flightTurn = new THREE.Quaternion();
+
+function startCameraFlight(toPos, toTarget, duration) {
+  followBot = null;
+  controls.enabled = false;
+  const fromOffset = camera.position.clone().sub(controls.target);
+  const toOffset = toPos.clone().sub(toTarget);
+  if (fromOffset.lengthSq() < 0.01) fromOffset.set(0, 12, 18);
+  if (toOffset.lengthSq() < 0.01) toOffset.copy(fromOffset);
   flyGoal = {
-    fromPos: camera.position.clone(),
     fromTarget: controls.target.clone(),
-    toPos: new THREE.Vector3(x + (bot ? 8.5 : 16), bot ? 6.8 : 13.5, z + (bot ? 10.5 : 18)),
-    toTarget: new THREE.Vector3(x, bot ? 1.05 : 1.5, z),
+    toTarget: toTarget.clone(),
+    toPos: toPos.clone(),
+    fromOffset,
+    toOffset,
+    fromDir: fromOffset.clone().normalize(),
+    toDir: toOffset.clone().normalize(),
+    fromRadius: fromOffset.length(),
+    toRadius: toOffset.length(),
     t: 0,
-    dur: bot ? 1.25 : 1.55,
+    dur: duration,
   };
+}
+
+function placeFlightCamera(goal, ease) {
+  // One move: the look point and the camera offset share the same ease,
+  // and the offset turns in place instead of cutting across the island.
+  controls.target.lerpVectors(goal.fromTarget, goal.toTarget, ease);
+  flightSpin.setFromUnitVectors(goal.fromDir, goal.toDir);
+  flightTurn.identity().slerp(flightSpin, ease);
+  flightDir.copy(goal.fromDir).applyQuaternion(flightTurn);
+  const radius = THREE.MathUtils.lerp(goal.fromRadius, goal.toRadius, ease);
+  camera.position.copy(controls.target).addScaledVector(flightDir, radius);
+  camera.lookAt(controls.target);
+}
+
+function framingFor(x, z, kind) {
+  const lookY = kind === "bot" ? 1.05 : 1.6;
+  const distance = kind === "bot" ? 10 : 15;
+  const height = kind === "bot" ? 5.6 : 8.2;
+  const yaw = Math.atan2(camera.position.x - x, camera.position.z - z);
+  return {
+    pos: new THREE.Vector3(x + Math.sin(yaw) * distance, height, z + Math.cos(yaw) * distance),
+    target: new THREE.Vector3(x, lookY, z),
+  };
+}
+
+function flyTo(x, z, kind = "plot") {
+  const shot = framingFor(x, z, kind);
+  startCameraFlight(shot.pos, shot.target, kind === "bot" ? 1.15 : 1.35);
+}
+
+function returnToOverview() {
+  clearBotSelection();
+  showZone(STATION);
+  startCameraFlight(overviewPos.clone(), overviewTarget.clone(), 1.45);
 }
 
 zoneList.innerHTML = [STATION, ...ZONES].map(
@@ -1579,6 +1946,10 @@ zoneList.innerHTML = [STATION, ...ZONES].map(
 function pickListedZone(event) {
   const btn = event.target.closest("[data-id]");
   if (!btn) return;
+  if (btn.classList.contains("active")) {
+    returnToOverview();
+    return;
+  }
   const zone = [STATION, ...ZONES].find((item) => item.id === btn.dataset.id);
   if (!zone) return;
   showZone(zone);
@@ -1587,6 +1958,20 @@ function pickListedZone(event) {
 
 zoneList.addEventListener("click", pickListedZone);
 hudToggle.addEventListener("click", () => setHudOpen(hud.classList.contains("collapsed")));
+overviewButton?.addEventListener("click", returnToOverview);
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") returnToOverview();
+});
+
+controls.addEventListener("start", () => {
+  if (introFlight || flyGoal) return;
+  if (followBot) {
+    followBot.userData.selected = false;
+    followBot.userData.bubble.className = "speech";
+    followBot.userData.bubble.textContent = "";
+    followBot = null;
+  }
+});
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -1629,13 +2014,152 @@ renderer.domElement.addEventListener("pointerdown", (event) => {
     if (pod) {
       const zone = [STATION, ...ZONES].find((item) => item.id === pod.userData.zoneId);
       if (zone) {
-        showZone(zone);
-        flyTo(zone.x, zone.z, "plot");
+        const active = document.querySelector(".zone-btn.active")?.dataset.id;
+        if (active === zone.id && !flyGoal) {
+          returnToOverview();
+        } else {
+          showZone(zone);
+          flyTo(zone.x, zone.z, "plot");
+        }
       }
       return;
     }
   }
 });
+
+const introTimers = [];
+let introFlight = null;
+
+function clearIntroTimers() {
+  while (introTimers.length) window.clearTimeout(introTimers.pop());
+}
+
+function layoutIntro() {
+  if (!introLiquid) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  // Size the sphere by both axes so it never crowds the titles on wide or
+  // short windows, then place the titles relative to its real edge.
+  const radius = w > 760 ? Math.min(h * 0.28, w * 0.17, 270) : Math.min(h * 0.24, w * 0.36, 270);
+  const dropH = radius * 2;
+  const dropW = dropH;
+  const x = (w - dropW) / 2;
+  const y = (h - dropH) / 2 - Math.min(10, h * 0.015);
+  const cx = w / 2;
+  const cy = y + dropH / 2;
+  const bottom = y + dropH;
+  const textGap = Math.max(28, w * 0.03);
+  const sideWidth = Math.max(140, w / 2 - radius - textGap - 24);
+  intro.style.setProperty("--intro-text-offset", `${(radius + textGap).toFixed(1)}px`);
+  intro.style.setProperty("--intro-side-width", `${sideWidth.toFixed(1)}px`);
+  // "THE WORLD" must fit on one line beside the sphere so the title reads
+  // left to right in one pass; shrink until the wider side fits.
+  let titleSize = Math.min(64, Math.max(20, sideWidth / 7.4));
+  intro.style.setProperty("--intro-title-size", `${titleSize.toFixed(1)}px`);
+  const titleSides = intro.querySelectorAll(".intro-copy");
+  const widest = () => Math.max(...[...titleSides].map((el) => el.scrollWidth));
+  while (w > 760 && titleSize > 20 && widest() > sideWidth) {
+    titleSize -= 2;
+    intro.style.setProperty("--intro-title-size", `${titleSize.toFixed(1)}px`);
+  }
+  intro.style.setProperty("--intro-tagline-top", `${(cy + radius + 36).toFixed(1)}px`);
+  const drop = [
+    `M ${cx} ${y}`,
+    `A ${radius} ${radius} 0 1 1 ${cx} ${bottom}`,
+    `A ${radius} ${radius} 0 1 1 ${cx} ${y}`,
+    "Z",
+  ].join(" ");
+  const highlight = [
+    `M ${x + dropW * 0.23} ${y + dropH * 0.27}`,
+    `C ${x + dropW * 0.12} ${y + dropH * 0.4}, ${x + dropW * 0.1} ${y + dropH * 0.58}, ${x + dropW * 0.18} ${y + dropH * 0.7}`,
+  ].join(" ");
+  const highlightSmall = [
+    `M ${x + dropW * 0.3} ${y + dropH * 0.14}`,
+    `C ${x + dropW * 0.36} ${y + dropH * 0.1}, ${x + dropW * 0.44} ${y + dropH * 0.08}, ${x + dropW * 0.5} ${y + dropH * 0.085}`,
+  ].join(" ");
+
+  introLiquid.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  introMaskRect.setAttribute("width", w);
+  introMaskRect.setAttribute("height", h);
+  introShadeRect.setAttribute("width", w);
+  introShadeRect.setAttribute("height", h);
+  introCutout.setAttribute("d", drop);
+  introDroplet.setAttribute("d", drop);
+  introRim.setAttribute("d", drop);
+  introLensShade.setAttribute("d", drop);
+  introHighlight.setAttribute("d", highlight);
+  introHighlightSmall.setAttribute("d", highlightSmall);
+
+  const origin = `${cx}px ${cy}px`;
+  [introCutout, introDroplet, introRim, introLensShade, introHighlight, introHighlightSmall].forEach((node) => {
+    node.style.transformOrigin = origin;
+  });
+  const zoom = (Math.hypot(w, h) / dropW) * 1.35;
+  intro.style.setProperty("--intro-zoom", zoom.toFixed(2));
+
+  if (introStars) {
+    introStars.replaceChildren();
+    for (let i = 0; i < 150; i += 1) {
+      const random = (salt) => {
+        const value = Math.sin((i + 1) * (12.9898 + salt * 7.31)) * 43758.5453;
+        return value - Math.floor(value);
+      };
+      const star = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      const size = 0.45 + random(3) * (random(4) > 0.94 ? 2.2 : 1.15);
+      const opacity = 0.28 + random(5) * 0.7;
+      star.setAttribute("cx", random(1) * w);
+      star.setAttribute("cy", random(2) * h);
+      star.setAttribute("r", size);
+      star.setAttribute("fill", random(6) > 0.78 ? "#b8d7ff" : "#ffffff");
+      star.classList.add("intro-star");
+      star.style.setProperty("--star-opacity", opacity.toFixed(2));
+      star.style.setProperty("--twinkle", `${2 + random(7) * 4}s`);
+      star.style.animationDelay = `${-random(8) * 5}s`;
+      introStars.appendChild(star);
+    }
+  }
+}
+
+function finishIntro() {
+  clearIntroTimers();
+  intro?.classList.add("finished");
+  intro?.classList.remove("ready", "zooming");
+  if (introFlight) {
+    camera.position.copy(introFlight.toPos);
+    controls.target.copy(introFlight.toTarget);
+    settleControls(introFlight.toPos, introFlight.toTarget);
+    introFlight = null;
+  }
+  controls.enabled = true;
+}
+
+function playIntro(force = false) {
+  if (!intro) return;
+  clearIntroTimers();
+  layoutIntro();
+  intro.classList.remove("finished", "zooming", "ready");
+  controls.enabled = false;
+
+  const toPos = camera.position.clone();
+  const toTarget = controls.target.clone();
+  const fromPos = toTarget.clone().add(toPos.clone().sub(toTarget).multiplyScalar(1.34));
+  camera.position.copy(fromPos);
+  introFlight = {
+    startedAt: performance.now(),
+    duration: 7200,
+    fromPos,
+    toPos,
+    fromTarget: toTarget.clone().add(new THREE.Vector3(0, 2.6, 0)),
+    toTarget,
+  };
+  controls.target.copy(introFlight.fromTarget);
+
+  requestAnimationFrame(() => intro.classList.add("ready"));
+  introTimers.push(window.setTimeout(() => intro.classList.add("zooming"), 3900));
+  introTimers.push(window.setTimeout(finishIntro, 7350));
+}
+
+replayIntro?.addEventListener("click", () => playIntro(true));
 
 function resize() {
   const w = window.innerWidth;
@@ -1644,30 +2168,76 @@ function resize() {
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
   labels.setSize(w, h);
+  if (intro?.classList.contains("ready")) layoutIntro();
 }
 window.addEventListener("resize", resize);
 resize();
 
 const clock = new THREE.Clock();
+let lastFrameAt = 0;
+let lastInteractionAt = performance.now();
+let tickScheduled = false;
 
-function tick() {
+["pointerdown", "pointermove", "wheel", "keydown"].forEach((type) =>
+  window.addEventListener(type, () => (lastInteractionAt = performance.now()), { passive: true }),
+);
+
+function frameInterval(now) {
+  if (introFlight || flyGoal || now - lastInteractionAt < 3000) return 0;
+  return document.hasFocus() ? 1000 / 30 : 1000 / 15;
+}
+
+function scheduleTick() {
+  if (tickScheduled || document.hidden) return;
+  tickScheduled = true;
+  requestAnimationFrame(tick);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  clock.getDelta();
+  scheduleTick();
+});
+
+function tick(now = performance.now()) {
+  tickScheduled = false;
+  if (document.hidden) return;
+  if (now - lastFrameAt < frameInterval(now) - 1) {
+    scheduleTick();
+    return;
+  }
+  lastFrameAt = now;
   try {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  // Keep motion time-based even if a frame stalls; the old 50ms cap made the
+  // entire colony appear to run in slow motion at low frame rates.
+  const dt = Math.min(clock.getDelta(), 0.1);
   const t = performance.now() * 0.001;
-  if (followBot) {
+  waterTexture.offset.set((t * 0.006) % 1, (t * 0.0035) % 1);
+  if (introFlight) {
+    const u = Math.min(1, (performance.now() - introFlight.startedAt) / introFlight.duration);
+    const ease = easeInOutCubic(u);
+    camera.position.lerpVectors(introFlight.fromPos, introFlight.toPos, ease);
+    controls.target.lerpVectors(introFlight.fromTarget, introFlight.toTarget, ease);
+    camera.lookAt(controls.target);
+  } else if (followBot) {
     const at = followBot.userData.aboard || !followBot.visible ? HATCH : followBot.position;
     followPos.set(at.x + 8.5, 6.8, at.z + 10.5);
     followLook.set(at.x, 1.05, at.z);
     const catchup = 1 - Math.exp(-dt * 2.35);
     camera.position.lerp(followPos, catchup);
     controls.target.lerp(followLook, catchup);
+    camera.lookAt(controls.target);
   } else if (flyGoal) {
     flyGoal.t += dt;
     const u = Math.min(1, flyGoal.t / flyGoal.dur);
-    const ease = easeInOutCubic(u);
-    camera.position.lerpVectors(flyGoal.fromPos, flyGoal.toPos, ease);
-    controls.target.lerpVectors(flyGoal.fromTarget, flyGoal.toTarget, ease);
-    if (u >= 1) flyGoal = null;
+    placeFlightCamera(flyGoal, easeInOutCubic(u));
+    if (u >= 1) {
+      const destination = flyGoal;
+      placeFlightCamera(destination, 1);
+      settleControls(camera.position.clone(), controls.target.clone());
+      flyGoal = null;
+      controls.enabled = true;
+    }
   } else {
     controls.update();
   }
@@ -1675,7 +2245,7 @@ function tick() {
   visitorCooldown -= dt;
   if (visitorCooldown <= 0) {
     spawnVisitor();
-    visitorCooldown = 18;
+    visitorCooldown = 50;
   }
 
   paintCinema(t);
@@ -1693,6 +2263,7 @@ function tick() {
     data.wait -= dt;
 
     if (data.aboard) {
+      if (!data.visitor && (data.status === "working" || data.status === "needs_input" || data.status === "down")) data.wait = 0;
       if (data.wait > 0) continue;
       if (data.visitor) {
         dismissVisitor(bot);
@@ -1751,9 +2322,46 @@ function tick() {
       continue;
     }
 
+    if (data.status === "down" && data.mode !== "down") {
+      data.mode = "down";
+      data.tilt = 0;
+    }
+
+    if (data.mode === "down") {
+      // Fall over and stay down until the agent reports again.
+      data.tilt = Math.min(1, data.tilt + dt * 2.4);
+      const fall = 1 - (1 - data.tilt) ** 3;
+      bot.rotation.x = (-Math.PI / 2) * fall;
+      const groundY = deckHeightAt(bot.position.x, bot.position.z);
+      data.walkY += (groundY - data.walkY) * Math.min(1, dt * 7);
+      bot.position.y = data.walkY + 0.5 * fall;
+      bot.scale.setScalar(1);
+      data.armL.rotation.x = -1.3 * fall;
+      data.armR.rotation.x = -1.3 * fall;
+      if (data.lamp?.material) data.lamp.material.emissiveIntensity = 0.5 + Math.sin(t * 3) * 0.4;
+      if (data.selected) data.wait = 20;
+      continue;
+    }
+
+    if (data.tilt > 0) {
+      data.tilt = Math.max(0, data.tilt - dt * 2.4);
+      bot.rotation.x = (-Math.PI / 2) * (1 - (1 - data.tilt) ** 3);
+    }
+
+    const post = data.agent && data.home && (data.status === "working" || data.status === "needs_input");
+    if (post && data.mode !== "goHome" && data.mode !== "homeStay") {
+      const spot = homeSpot(bot);
+      data.mode = "goHome";
+      data.tx = spot.x;
+      data.tz = spot.z;
+      data.wait = 20;
+    } else if (!post && !data.selected && (data.mode === "goHome" || data.mode === "homeStay")) {
+      data.wait = 0;
+    }
+
     if (data.selected && (data.mode === "goHome" || data.mode === "homeStay")) {
       data.wait = 20;
-    } else if (data.wait <= 0) {
+    } else if (!post && data.wait <= 0) {
       const goShip = data.mode !== "exit" && (data.visitor ? Math.random() < 0.5 : Math.random() < 0.3);
       const next = goShip ? shipTarget() : plotTarget(bot);
       data.mode = goShip ? "toShip" : "roam";
@@ -1771,18 +2379,22 @@ function tick() {
       const dir = steerDir(bot.position.x, bot.position.z, data.tx, data.tz);
       const nextX = bot.position.x + dir.x * pace * dt;
       const nextZ = bot.position.z + dir.z * pace * dt;
-      if (!blocked(nextX, nextZ, 0.55)) {
-        bot.position.x = nextX;
-        bot.position.z = nextZ;
-      } else {
-        const slideX = bot.position.x + -dir.z * pace * dt;
-        const slideZ = bot.position.z + dir.x * pace * dt;
-        if (!blocked(slideX, slideZ, 0.55)) {
-          bot.position.x = slideX;
-          bot.position.z = slideZ;
-        }
+      let stepX = nextX;
+      let stepZ = nextZ;
+      if (blocked(stepX, stepZ, 0.55)) {
+        stepX = bot.position.x + -dir.z * pace * dt;
+        stepZ = bot.position.z + dir.x * pace * dt;
       }
-      bot.rotation.y = Math.atan2(dir.x, dir.z);
+      if (!blocked(stepX, stepZ, 0.55)) {
+        bot.position.x = stepX;
+        bot.position.z = stepZ;
+      }
+      const desiredTurn = Math.atan2(dir.x, dir.z);
+      const turnDelta = Math.atan2(
+        Math.sin(desiredTurn - bot.rotation.y),
+        Math.cos(desiredTurn - bot.rotation.y),
+      );
+      bot.rotation.y += turnDelta * Math.min(1, dt * 8);
     } else if (data.mode === "goHome") {
       data.mode = "homeStay";
       data.wait = 30;
@@ -1803,7 +2415,11 @@ function tick() {
     data.armL.rotation.x = swing;
     data.armR.rotation.x = -swing;
     if (data.lamp?.material) {
-      data.lamp.material.emissiveIntensity = data.selected ? 1.4 + Math.sin(t * 8) * 0.4 : 0.9;
+      data.lamp.material.emissiveIntensity = data.selected
+        ? 1.4 + Math.sin(t * 8) * 0.4
+        : data.status === "working"
+          ? 1.2 + Math.sin(t * 6) * 0.6
+          : 0.9;
     }
   }
 
@@ -1812,9 +2428,17 @@ function tick() {
   } catch (err) {
     window.__tickErr = String(err && err.stack ? err.stack : err);
   }
-  requestAnimationFrame(tick);
+  scheduleTick();
 }
+
+// The sun and architecture are static, so render their shadow map once.
+// This removes a full second scene render from every animation frame.
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
+renderer.compile(scene, camera);
 
 showZone(STATION);
 setHudOpen(false);
-tick();
+scheduleTick();
+pollState();
+playIntro();

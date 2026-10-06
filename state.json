@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "demo": true,
+  "updatedAt": null,
+  "runner": {
+    "heartbeatAt": null,
+    "tickSec": 10,
+    "ollama": "demo"
+  },
+  "agents": [
+    {
+      "id": "terra",
+      "name": "Terra",
+      "home": null,
+      "task": "Keep the local island healthy and report its overall status.",
+      "status": "idle",
+      "summary": "Waiting for the local Ollama runner.",
+      "model": "qwen3:4b",
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "runs": 0
+    },
+    {
+      "id": "pulse",
+      "name": "Pulse",
+      "home": "daily",
+      "task": "Help choose today's three most important outcomes.",
+      "status": "needs_input",
+      "summary": "Needs today's priorities from Nikhil.",
+      "model": "qwen3:4b",
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "runs": 0
+    },
+    {
+      "id": "knot",
+      "name": "Knot",
+      "home": "decisions",
+      "task": "Turn an open choice into a clear decision and next action.",
+      "status": "needs_input",
+      "summary": "Needs a decision to work on.",
+      "model": "qwen3:4b",
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "runs": 0
+    },
+    {
+      "id": "mirror",
+      "name": "Mirror",
+      "home": "reflect",
+      "task": "Create a concise reflection prompt and identify one useful lesson.",
+      "status": "idle",
+      "summary": "Waiting for the local Ollama runner.",
+      "model": "qwen3:4b",
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "runs": 0
+    },
+    {
+      "id": "smash",
+      "name": "Smash",
+      "home": "court",
+      "task": "Turn the latest badminton result into one practical follow-up.",
+      "status": "needs_input",
+      "summary": "Needs the latest game result.",
+      "model": "qwen3:4b",
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "runs": 0
+    },
+    {
+      "id": "drift",
+      "name": "Drift",
+      "home": null,
+      "task": "Review the colony roles and suggest one small maintenance action.",
+      "status": "idle",
+      "summary": "Waiting for the local Ollama runner.",
+      "model": "qwen3:4b",
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "runs": 0
+    },
+    {
+      "id": "echo",
+      "name": "Echo",
+      "home": null,
+      "task": "Wait for a local note, then condense it into one actionable sentence.",
+      "status": "needs_input",
+      "summary": "Needs a local note.",
+      "model": "qwen3:4b",
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "runs": 0
+    }
+  ]
+}

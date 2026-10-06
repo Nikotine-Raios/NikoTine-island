@@ -7,3 +7,5 @@ Thumbs.db
 *.key
 *.token
 node_modules/
+state.live.json
+agents/runner.log

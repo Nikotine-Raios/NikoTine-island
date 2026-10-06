@@ -4,10 +4,65 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Nikhil Island</title>
-    <link rel="stylesheet" href="./style.css?v=39" />
+    <link rel="stylesheet" href="./style.css?v=48" />
   </head>
   <body>
     <div id="view"></div>
+    <button id="overviewButton" class="overview-button" type="button" aria-label="Return to island overview">
+      <span aria-hidden="true">⌂</span>
+      Overview
+    </button>
+    <div id="intro" class="intro" aria-label="The World of Raios opening">
+      <svg id="introLiquid" class="intro-liquid" aria-hidden="true">
+        <defs>
+          <radialGradient id="introShade" cx="50%" cy="44%" r="78%">
+            <stop offset="0" stop-color="#101b31" />
+            <stop offset="0.4" stop-color="#080d1b" />
+            <stop offset="0.76" stop-color="#03050c" />
+            <stop offset="1" stop-color="#010207" />
+          </radialGradient>
+          <radialGradient id="introGlass" cx="31%" cy="22%" r="78%">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0.5" />
+            <stop offset="0.22" stop-color="#d9f4ff" stop-opacity="0.08" />
+            <stop offset="0.7" stop-color="#72b8ce" stop-opacity="0.11" />
+            <stop offset="0.9" stop-color="#0a222e" stop-opacity="0.3" />
+            <stop offset="1" stop-color="#e8fbff" stop-opacity="0.7" />
+          </radialGradient>
+          <filter id="introLiquidNoise" x="-30%" y="-30%" width="160%" height="160%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.008 0.024" numOctaves="2" seed="8" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="5" xChannelSelector="R" yChannelSelector="G" />
+            <feGaussianBlur stdDeviation="0.35" />
+          </filter>
+          <filter id="introGlow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="9" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <radialGradient id="introLens" cx="50%" cy="50%" r="50%">
+            <stop offset="0" stop-color="#000000" stop-opacity="0" />
+            <stop offset="0.72" stop-color="#000000" stop-opacity="0" />
+            <stop offset="0.9" stop-color="#021018" stop-opacity="0.22" />
+            <stop offset="1" stop-color="#021018" stop-opacity="0.5" />
+          </radialGradient>
+          <mask id="introMask" maskUnits="userSpaceOnUse">
+            <rect id="introMaskRect" fill="white" />
+            <path id="introCutout" fill="black" />
+          </mask>
+        </defs>
+        <rect id="introShadeRect" fill="url(#introShade)" mask="url(#introMask)" />
+        <g id="introStars" mask="url(#introMask)"></g>
+        <path id="introLensShade" fill="url(#introLens)" />
+        <path id="introDroplet" fill="url(#introGlass)" stroke="rgba(229,248,255,.78)" stroke-width="1.4" filter="url(#introLiquidNoise)" />
+        <path id="introRim" fill="none" stroke="rgba(255,255,255,.42)" stroke-width="5" filter="url(#introGlow)" />
+        <path id="introHighlight" fill="none" stroke="rgba(255,255,255,.82)" stroke-linecap="round" stroke-width="4" filter="url(#introGlow)" />
+        <path id="introHighlightSmall" fill="none" stroke="rgba(255,255,255,.55)" stroke-linecap="round" stroke-width="2.5" filter="url(#introGlow)" />
+      </svg>
+      <div class="intro-copy intro-copy-left"><span>THE</span><span>WORLD</span></div>
+      <div class="intro-copy intro-copy-right"><span>OF</span><span>RAIOS</span></div>
+      <p class="intro-tagline">Where agents come alive</p>
+    </div>
     <aside id="hud" class="collapsed">
       <button id="hudToggle" type="button" aria-expanded="false" aria-controls="hudPanel" aria-label="Show colony panel">
         <span class="chevron" aria-hidden="true"></span>
@@ -25,16 +80,17 @@
           <p class="meta" id="cardMeta"></p>
           <ul id="cardItems"></ul>
         </section>
+        <button id="replayIntro" class="replay-intro" type="button">Replay entrance</button>
       </div>
     </aside>
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+          "three": "./vendor/three/build/three.module.js",
+          "three/addons/": "./vendor/three/addons/"
         }
       }
     </script>
-    <script type="module" src="./app.js?v=39"></script>
+    <script type="module" src="./app.js?v=84"></script>
   </body>
 </html>
